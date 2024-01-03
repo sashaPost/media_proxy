@@ -1,4 +1,3 @@
-media/images/*
 __pycache__
 .venv
 .vscode
