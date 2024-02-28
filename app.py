@@ -13,7 +13,9 @@ from PIL import Image
 app = Flask(__name__)
 app.config['SECRET_KEY'] = str(secrets.SystemRandom().getrandbits(128))
 app.config['MAX_CONTENT_LENGTH'] = 24 * 1024 * 1024    # Limit file size to 24MB
-app.config['ALLOWED_EXTENSIONS'] = ['jpeg', 'jpg', 'png', 'gif', 'doc', 'docx']
+# app.config['ALLOWED_EXTENSIONS'] = ['jpeg', 'jpg', 'png', 'gif', 'doc', 'docx']
+ALLOWED_EXTENSIONS = {'image': set(['jpeg', 'jpg', 'png', 'gif']),
+                                    'document': set(['docx', 'pdf'])}
 # app.config['UPLOADED_IMAGES_DEST'] = 'media/images'
 # app.config['UPLOADED_FILES_DEST'] = 'media/files'
 app.config['MEDIA_FILES_DEST'] = 'media'
@@ -55,7 +57,12 @@ def allowed_file(file_name):
     logger.info(f"'file_name': {file_name}")
     logger.info(f"File extension: {file_name.split('.')[-1].lower()}")
     
-    if file_name.split('.')[-1].lower() not in app.config['ALLOWED_EXTENSIONS']:
+    # if file_name.split('.')[-1].lower() not in app.config['ALLOWED_EXTENSIONS']:
+    #     return False
+    
+    file_extension = file_name.split('.')[-1].lower()
+    if file_extension not in ALLOWED_EXTENSIONS['image'] \
+        and file_extension not in ALLOWED_EXTENSIONS['document']:
         return False
     
     uploaded_file = request.files['file']
@@ -75,26 +82,39 @@ def allowed_file(file_name):
             
 
 def secure_name(file_path):
+    logger.info("'secure_name(file_path)' triggered")
     uploaded_file = request.files['file']
-    content_type = uploaded_file.content_type
-    logger.info(f"'secure_name' 'content_type': {content_type}")
+    # content_type = uploaded_file.content_type
+    # logger.info(f"'secure_name' 'content_type': {content_type}")
     
     logger.info(file_path) 
-    safe_filename = secure_filename(os.path.basename(file_path))  # Sanitize filename only
+    filename = os.path.basename(file_path)
+    safe_filename = secure_filename(filename)  # Sanitize filename only
     logger.info(safe_filename) 
     
-    if content_type.startswith('image/'):
+    if uploaded_file.content_type.startswith('image/'):
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], "images")
-        result_path = os.path.join(allowed_path, safe_filename)
-        logger.info(f"'result_path': {result_path}")
-        return result_path
-    elif content_type.startswith('application/'):
+    elif uploaded_file.content_type.startswith('application/'):
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], "files")
-        result_path = os.path.join(allowed_path, safe_filename)
-        logger.info(f"'result_path': {result_path}")
-        return result_path
     else:
         return False
+    
+    result_path = os.path.join(allowed_path, safe_filename)
+    logger.info(f"result_path: {result_path}")
+    return result_path
+    
+    # if content_type.startswith('image/'):
+    #     allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], "images")
+    #     result_path = os.path.join(allowed_path, safe_filename)
+    #     logger.info(f"'result_path': {result_path}")
+    #     return result_path
+    # elif content_type.startswith('application/'):
+    #     allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], "files")
+    #     result_path = os.path.join(allowed_path, safe_filename)
+    #     logger.info(f"'result_path': {result_path}")
+    #     return result_path
+    # else:
+    #     return False
 
 def handle_upload(file_path):
     logger.info("'POST' method detected")
@@ -107,6 +127,10 @@ def handle_upload(file_path):
     
     uploaded_file = request.files['file']
     logger.info(f"'uploaded_file': {uploaded_file}")
+    
+    if uploaded_file.filesize > app.config['MAX_CONTENT_LENGTH']:
+        logger.warning("File size exceeds allowed limit")
+        return Response("File size exceeds allowed limit", status=413)
     
     if uploaded_file.filename == '':
         logger.warning("uploaded_file.filename == ''")
