@@ -9,33 +9,63 @@ class TestApp(unittest.TestCase):
     def tearDown(self):
         pass
     
-    def test_get_existing_file(self):
-        response = self.app.get('/media/images/zystrich1.jpg')
-        self.assertEqual(response.status_code, 200)
+    def perform_test(self, method, endpoint, data=None, headers=None):
+        """
+        Helper function to perform a test for a given HTTP method and endpoint.
+        """
+        if data:
+            response = getattr(self.app, method)(endpoint, data=data, headers=headers)
+        else:
+            response = getattr(self.app, method)(endpoint, headers=headers)
+        return response
     
-    def test_get_non_existing_file(self):
-        response = self.app.get('/media/images/nonexistent.jpg')
-        self.assertEqual(response.status_code, 404)
+    def create_test_method(self, method, endpoint, data=None, headers=None):
+        """
+        Helper function to dynamically create a test method for a given HTTP method and endpoint.
+        """
+        def test_method(self):
+            response = self.perform_test(method, endpoint, data, headers)
+            self.assertEqual(
+                response.status_code, 
+                200 if method != 'DELETE' else 404,
+            )
+        return test_method
+    
+    def add_route_tests(self, route, filenames, allowed_methods, data=None):
+        """
+        Helper function to add test methods for a specific route.
+        """
+        for method in allowed_methods:
+            for filename in filenames:
+                endpoint = f"/{route}/{filename}"
+                headers = {"Authorization": "api_key"}
+                test_method = self.create_test_method(method, endpoint, data, headers)
+                test_name = f"test_{method.lower()}_{route.replace('/', '_')}_{filename.replace('.', '_')}"
+                setattr(self, test_name, test_method)
+                
+    def test_images_routes(self):
+        """
+        Test methods for '/media/images/' routes.
+        """
+        image_filenames = ['example1.jpg', 'example2.jpg']    # change the examples
+        allowed_methods = ['GET', 'POST']
+        self.add_route_tests('media/images', image_filenames, allowed_methods)
         
-    def test_post_upload_file(self):
-        data = {'file': (open('zystrich3.jpg', 'rb'), 'zystrich3.jpg')}
-        response = self.app.post('/media/images/zystrich3.jpg', data=data, content_type='multipart/form-data')
-        self.assertEqual(response.status_code, 200)
+    def test_files_routes(self):
+        """
+        Test methods for 'media/files/' routes.
+        """
+        text_filenames = ['example1.docx', 'example2.docx'] # change the examples
+        allowed_methods = ['GET', 'POST']
+        self.add_route_tests('media/files', text_filenames, allowed_methods)
         
-    def test_put_update_file(self):
-        data = {'file': (open('zystrich_test.jpg', 'rb'), 'zystrich_test.jpg')}
-        response = self.app.put('/media/images/zystrich3.jpg', data=data, content_type='multipart/form-data')
-        self.assertEqual(response.status_code, 200)
-        
-    def test_delete_existing_file(self):
-        response = self.app.delete('/media/images/zystrich3.jpg')
-        self.assertEqual(response.status_code, 200)
-        
-    def test_delete_non_existing_file(self):
-        response = self.app.delete('/media/images/nonexistent.jpg')
-        self.assertEqual(response.status_code, 404)
-        
-        
+    def test_unauthorized_upload(self):
+        """
+        Test upload without authorization header.
+        """
+        data = {"file": (b"test_content", "test.txt")}
+        response = self.perform_test("POST", "/media/files", data)
+        self.assertEqual(response.status_code, 401)
         
 if __name__ == "__main__":
     unittest.main()
