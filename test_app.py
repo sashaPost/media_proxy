@@ -1,5 +1,7 @@
 import unittest
 from app import app
+import os
+
 
 
 class TestApp(unittest.TestCase):
@@ -13,10 +15,18 @@ class TestApp(unittest.TestCase):
         """
         Helper function to perform a test for a given HTTP method and endpoint.
         """
+        print("Method inside 'perform_test':", method)
+        
         if data:
-            response = getattr(self.app, method)(endpoint, data=data, headers=headers)
+            response = getattr(self.app, method.lower())(
+                endpoint, 
+                data=data, 
+                headers=headers,
+                content_type='multipart/form-data',
+                buffered=True,
+            )
         else:
-            response = getattr(self.app, method)(endpoint, headers=headers)
+            response = getattr(self.app, method.lower())(endpoint, data=data, headers=headers)
         return response
     
     def create_test_method(self, method, endpoint, data=None, headers=None):
@@ -49,8 +59,19 @@ class TestApp(unittest.TestCase):
         """
         image_filenames = ['example1.jpg', 'example2.jpg']    # change the examples
         allowed_methods = ['GET', 'POST']
-        self.add_route_tests('media/images', image_filenames, allowed_methods)
-        
+        # self.add_route_tests('media/images', image_filenames, allowed_methods)
+        for method in allowed_methods:
+            for filename in image_filenames:
+                endpoint = f"/media/images/{filename}" 
+                headers = {"Authorization": "api_key"}
+
+                if method == 'POST':
+                    with open(os.path.join('tests', filename), 'rb') as f:
+                        data = {'file': (f, filename)}
+                    test_method = self.create_test_method(method, endpoint, data, headers)
+                else:
+                    test_method = self.create_test_method(method, endpoint, headers=headers)
+                        
     def test_files_routes(self):
         """
         Test methods for 'media/files/' routes.
