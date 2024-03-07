@@ -1,4 +1,4 @@
-from flask import Flask, Response, request, send_from_directory, jsonify
+from flask import Blueprint, Flask, Response, request, send_from_directory, jsonify
 # import imghdr   # Determine the type of an image
 from werkzeug.utils import secure_filename
 import os
@@ -13,6 +13,8 @@ import io
 
 
 app = Flask(__name__)
+setup_blueprint = Blueprint('setup', __name__)
+
 app.config['SECRET_KEY'] = str(secrets.SystemRandom().getrandbits(128))
 app.config['MAX_CONTENT_LENGTH'] = 24 * 1024 * 1024    # Limit file size to 24MB
 ALLOWED_EXTENSIONS = {'image': set(['jpeg', 'jpg', 'png', 'gif']),
@@ -39,6 +41,31 @@ API_KEY = "api_key"
 
 
 
+@setup_blueprint.before_app_request
+def directories_check():
+    """
+    Creates media directories on first request.
+    """
+    logger.info("*** 'directories_check' was triggered ***")
+    try:
+        os.makedirs(app.config['MEDIA_FILES_DEST'], exist_ok=True)
+        for directory in ALLOWED_DIRECTORIES:
+            dest_dir = os.path.join(app.config['MEDIA_FILES_DEST'], directory)
+            os.makedirs(dest_dir, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Failed to create directory {dest_dir}: {e}")
+
+app.register_blueprint(setup_blueprint)
+
+def check_api_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.info(request.headers.get("Authorization"))
+        if request.headers.get("Authorization") != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+        return func(*args, **kwargs)
+    return wrapper
+
 # implements the GET method logic:
 @app.route('/media/<path:file_path>', methods=['GET'])
 def handle_get_request(file_path):
@@ -53,17 +80,16 @@ def handle_get_request(file_path):
         return Response("File not found", status=404)
     except Exception as e:
         return Response("Unsupported method", status=405)
-
-def check_api_key(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        logger.info(request.headers.get("Authorization"))
-        if request.headers.get("Authorization") != API_KEY:
-            return jsonify({"error": "Unauthorized"}), 401
-        return func(*args, **kwargs)
-    return wrapper
             
 def is_valid_image(uploaded_file):
+    """_summary_
+
+    Args:
+        uploaded_file (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
     logger.info("*** 'is_valid_image' was triggered ***") 
     
     stream = uploaded_file.stream
@@ -84,11 +110,15 @@ def is_valid_image(uploaded_file):
             logger.warning(f"Failed to open image using Pillow: {e}")
             return False   
     
-    # if 'image' in file_type_description:
-    #     return True
-    # return False
-
 def is_valid_file(file_stream):
+    """_summary_
+
+    Args:
+        file_stream (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
     logger.info("* 'is_valid_file' was triggered *") 
     logger.info(f"'file_stream': {file_stream}") 
     
@@ -103,18 +133,12 @@ def is_valid_file(file_stream):
         
 def path_secure(origin_file_path):
     """
-    !!! provide it with 'origin_file_path'
-    Should return secured file path or False.
+    
     """
     logger.info("*** 'path_secure' triggered ***")
     
     uploaded_file = request.files['file']
     logger.info(f"'uploaded_file': {uploaded_file}")
-    
-    # * was already checked in 'handle_upload'!
-    # if not uploaded_file:
-    #     logger.warning("No file was provided")
-    #     return Response
 
     secured_filename = secure_filename(uploaded_file.filename)
     logger.info(f"'file_name': {secured_filename}")
@@ -130,12 +154,10 @@ def path_secure(origin_file_path):
     elif is_valid_file(uploaded_file.stream):  # Now check for Word documents
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'files')
         logger.info(f"'allowed_path': {allowed_path}")
-    else:  # Fallback if neither image nor document
+    else:  
         logger.warning("Invalid file type")
         return False 
-    
-    os.makedirs(allowed_path, exist_ok=True)
-    
+        
     logger.info(f"'secured_filename': {secured_filename}")
     logger.info(f"'allowed_path': {allowed_path}")
     result_path = os.path.join(allowed_path, secured_filename)
@@ -149,7 +171,7 @@ def get_file_extension(origin_file_path):
         origin_file_path (_type_): _description_
 
     Returns:
-        _type_: _description_
+        Bool: _description_
     """
     logger.info("*** 'get_file_extension' was triggered ***")
     file_extension = origin_file_path.split('.')[-1]
@@ -160,8 +182,6 @@ def get_file_extension(origin_file_path):
         return False
     return True
      
-    # return file_extension
-
 def get_request_directory(req_abs_file_path):
     """_summary_
 
@@ -180,15 +200,13 @@ def is_valid_file_path(origin_file_path):
         file_path (_type_): _description_
 
     Returns:
-        _type_: _description_
+        Bool: _description_
     """
     logger.info(f"*** 'is_valid_file_path' was triggered ***")
     
     req_abs_file_path = os.path.abspath(os.path.normpath(os.path.join(app.config['MEDIA_FILES_DEST'], origin_file_path)))
     logger.info(f"'req_abs_file_path': {req_abs_file_path}")
     
-    # for directory in ALLOWED_DIRECTORIES:
-    #     print(directory)
     media_abs_path = os.path.abspath(app.config['MEDIA_FILES_DEST'])
     logger.info(f"'media_abs_path': {media_abs_path}")
     
@@ -209,14 +227,17 @@ def allowed_path_and_extension(origin_file_path):
     Should be called in 'upload_file' before 'path_secure()'.
     Performs check by file extension only (from origin file path).
     If 'origin_path' != 'allowed_path' return False without checking file extension.
-    # return Bool
+    _summary_
+
+    Args:
+        file_path (_type_): _description_
+
+    Returns:
+        Bool: _description_
     """
     logger.info("*** 'allowed_path_and_extension' was triggered ***")
     logger.info(f"'origin_file_path': {origin_file_path}")
     
-    # logger.info(f"'is_valid_file_path(origin_file_path)': {is_valid_file_path(origin_file_path)}")
-    # logger.info(f"'get_file_extension(origin_file_path)': {get_file_extension(origin_file_path)}")
-      
     if is_valid_file_path(origin_file_path) and get_file_extension(origin_file_path):
         return True
     return False
@@ -229,7 +250,7 @@ def handle_upload(origin_file_path):
 
     logger.info("*** 'handle_upload' was triggered ***")
     logger.info(f"'origin_file_path': {origin_file_path}")
-    # logger.info(request.files['file'])
+
     if 'file' not in request.files:
         logger.warning("'file' not in 'request.files'")
         logger.warning(f"{request.files}")
@@ -245,10 +266,7 @@ def handle_upload(origin_file_path):
     if uploaded_file.filename == '':
         logger.warning("uploaded_file.filename == ''")
         return Response("Empty filename", status=400)
-    
-    # ae = allowed_path_and_extension(origin_file_path)
-    # logger.info(f"'ae': {ae}")
-    
+        
     try:
         if allowed_path_and_extension(origin_file_path):
             logger.info("passed 'if allowed_path_and_extension(origin_file_path)'")
@@ -257,27 +275,10 @@ def handle_upload(origin_file_path):
             uploaded_file.save(secured_path)
             logger.info("SUCCESS")
             return True
-            # return Response("File was uploaded successfully", status=200)
     except Exception as e:
         logger.info(f"Exception: {e}")
         logger.warning(f"!!! 'handle_upload' failed !!!")
         return False
-        # return Response("Error handling file", status=501)      
-        
-    # if allowed_path_and_extension(origin_file_path) == True:
-    #     logger.info("passed 'if allowed_path_and_extension(origin_file_path)'")
-    #     try:
-    #         secured_path = path_secure(origin_file_path)
-    #         logger.info(f"'secured_path': {secured_path}")
-    #         uploaded_file.save(secured_path)
-    #         logger.info("SUCCESS")
-    #         return Response("File was uploaded successfully", status=200)
-    #     except Exception as e:
-    #         logger.info(f"Exception: {e}")
-    #         logger.warning(f"!!! 'handle_upload' failed !!!")
-    #         return Response("Error handling file", status=501)
-    # else:    
-    #     return Response("File type not allowed", 413)
     
 @app.route('/media/<path:origin_file_path>', methods=['POST'])
 @check_api_key
@@ -289,13 +290,7 @@ def upload_file(origin_file_path):
     if handle_upload(origin_file_path):
         return Response("OK", status=200)
     return Response("Error uploading file", status=501)
-    # try:
-    #     handle_upload(origin_file_path)
-    #     return Response("OK", status=200)
-    # except Exception as e:
-    #     logger.warning(f"Exception: {e}")
-        # return Response("Error uploading file", status=501)
-            
+
 if __name__ == '__main__':
     app.run()
     
