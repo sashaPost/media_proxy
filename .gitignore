@@ -1,9 +1,11 @@
 __pycache__/
 .venv/
 .vscode/
-media/
 .git/
 3.10_venv/
+
+media/
+tests/
 
 .env
 *.ini
