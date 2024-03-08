@@ -1,164 +1,299 @@
-from flask import Flask, Response, request
-import imghdr   # Determine the type of an image
+from flask import Blueprint, Flask, Response, request, send_from_directory, jsonify
 from werkzeug.utils import secure_filename
 import os
 import secrets
 import logging
-# from dotenv import load_dotenv
+from urllib.parse import quote_plus, urlparse
+from functools import wraps
+from PIL import Image
+import magic
+import docx
+import io
 
-# the second approach:
-# from flask_uploads import UploadSet, configure_uploads, IMAGES
-# photos = UploadSet('photos', IMAGES)
+from dotenv import load_dotenv
 
-# load_dotenv() 
+
+
+load_dotenv() 
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = str(secrets.SystemRandom().getrandbits(128))
-# https://blog.miguelgrinberg.com/post/handling-file-uploads-with-flask
+setup_blueprint = Blueprint('setup', __name__)
+
+app.config['SECRET_KEY'] = str(secrets.SystemRandom().getrandbits(128))
 app.config['MAX_CONTENT_LENGTH'] = 24 * 1024 * 1024    # Limit file size to 24MB
-app.config['UPLOAD_EXTENSIONS'] = ['jpeg', 'jpg', 'png', 'gif']
-app.config['UPLOADED_IMAGES_DEST'] = 'media/images'
+
+ALLOWED_EXTENSIONS = {'image': set(['jpeg', 'jpg', 'png', 'gif']),
+                                    'document': set(['docx', 'pdf'])}
+ALLOWED_DIRECTORIES = ['images', 'files']
+app.config['MEDIA_FILES_DEST'] = 'media'
 app.config['ENV'] = 'production'
-app.config['DEBUG'] = False 
+app.config['DEBUG'] = False
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger('HTTPS_Request')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-# backend_hostname = os.getenv("BACKEND_HOSTNAME")
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.DEBUG)
 
-# def validate_image(file_name):
-#     image_type = imghdr.what(file_name)
-#     if image_type:
-#         return True
-#     return False    
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+console_handler.setFormatter(formatter)
 
-# was replaced by 'validate_image()'
-def allowed_file(file_name):
-    # DEBUG:
-    # file_extension = filename.rsplit('.', 1)[1].lower()
-    # print(f"Extracted file extension: {file_extension}")
-    return '.' in file_name and file_name.rsplit('.', 1)[1].lower() in app.config['UPLOAD_EXTENSIONS']
+logger.addHandler(console_handler)
 
-@app.route('/media/images/<filename>', methods=['GET', 'POST', 'PUT', 'DELETE'])
-def proxy(filename):
-    # DEBUG:
-    # print(request)
-    if request.method == 'GET':
-        file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-        # DEBUG:
-        # print(f"File Path: {file_path}")
-        try:
-            with open(file_path, 'rb') as file:
-                content = file.read()
-            return Response(content, mimetype='application/octet-stream')
-        except FileNotFoundError:
-            # DEBUG:
-            # print("File not found")
-            return Response("File not found", status=404)
-        except Exception as e:
-            # DEBUG:
-            # print(f"Error: {str(e)}")
-            # return Response(f"Error: {str(e)}", status=500)
-            return Response("Error: {}".format(str(e)), status=500)
-                
-    elif request.method == 'POST':
-        
-        logger.info(f'HOST: {request.host}')
-        # logger.info(f'BACK (env): {backend_hostname}')
-        client_hostname = request.remote_addr
-        logger.info(f'Client Hostname: {client_hostname}')
-        # if client_hostname != 'HuIet4':
-        if client_hostname != '192.168.1.2':
-            return Response("FUCK OFF", status=403)
+API_KEY = os.getenv('API_KEY')
+
+
+
+@setup_blueprint.before_app_request
+def directories_check():
+    """
+    Creates media directories on first request.
+    """
+    logger.info("*** 'directories_check' was triggered ***")
+    try:
+        os.makedirs(app.config['MEDIA_FILES_DEST'], exist_ok=True)
+        for directory in ALLOWED_DIRECTORIES:
+            dest_dir = os.path.join(app.config['MEDIA_FILES_DEST'], directory)
+            os.makedirs(dest_dir, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Failed to create directory {dest_dir}: {e}")
+
+app.register_blueprint(setup_blueprint)
+
+def check_api_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.info(request.headers.get("Authorization"))
+        if request.headers.get("Authorization") != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+        return func(*args, **kwargs)
+    return wrapper
+
+# implements the GET method logic:
+@app.route('/media/<path:file_path>', methods=['GET'])
+def handle_get_request(file_path):
+    logger.info(f"'file_path': {file_path}")
+    logger.info("'GET' method detected")
+    try:
+        logger.info(f"'os.path.dirname': {os.path.dirname(file_path)}")
+        logger.info(f"'os.path.basename': {os.path.basename(file_path)}")
+        return send_from_directory(os.path.join(app.config['MEDIA_FILES_DEST'], \
+            os.path.dirname(file_path)), os.path.basename(file_path))
+    except FileNotFoundError:
+        return Response("File not found", status=404)
+    except Exception as e:
+        return Response("Unsupported method", status=405)
+            
+def is_valid_image(uploaded_file):
+    """_summary_
+
+    Args:
+        uploaded_file (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
+    logger.info("*** 'is_valid_image' was triggered ***") 
     
-        if 'file' not in request.files:
-            return Response("No file part", status=400)
+    stream = uploaded_file.stream
+    mime = magic.Magic()
+    # file_type_description = mime.from_buffer(file_stream.read(1024))
+    file_type_description = mime.from_buffer(stream.read(4096))
+    stream.seek(0)
+    logger.info(f"'file_type_description': {file_type_description}")
+    
+    logger.info(f"'uploaded_file.content_type': {uploaded_file.content_type}")
+    
+    if uploaded_file.content_type.startswith('image/'):
+        try:
+            Image.open(uploaded_file.stream)
+            logger.info(f"'Image.open(uploaded_file.stream)': {Image.open(uploaded_file.stream)}")
+            return True
+        except (IOError, OSError) as e:
+            logger.warning(f"Failed to open image using Pillow: {e}")
+            return False   
+    
+def is_valid_file(file_stream):
+    """_summary_
 
-        uploaded_file = request.files['file']
-        if uploaded_file.filename == '':
-            return Response("No selected file", status=400)
+    Args:
+        file_stream (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
+    logger.info("* 'is_valid_file' was triggered *") 
+    logger.info(f"'file_stream': {file_stream}") 
+    
+    file_bytes = file_stream.read()
+    try: 
+        document = docx.Document(io.BytesIO(file_bytes))
+        logger.info(f"'document': {document}")
+        return True
+    except docx.opc.exceptions.PackageNotFoundError as e:
+        logger.warning(f"{e}")
+        return False
         
-        if not allowed_file(uploaded_file.filename):
-            return Response("File type not allowed", status=400)
-        else:
-            filename = secure_filename(uploaded_file.filename)
-            file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-            uploaded_file.save(file_path)
-            os.chmod(file_path, 0o775)
-            return Response("File was uploaded successfully", status=200)
+def path_secure(origin_file_path):
+    """
+    
+    """
+    logger.info("*** 'path_secure' triggered ***")
+    
+    uploaded_file = request.files['file']
+    logger.info(f"'uploaded_file': {uploaded_file}")
 
-        # validate_image() duplicates allowed_file()
-        # if validate_image(uploaded_file.filename):             
-        #     filename = secure_filename(uploaded_file.filename)
-        #     file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-        #     uploaded_file.save(file_path)
-        #     return Response("File was uploaded successfully", status=200)
-        # else:
-        #     return Response("Not an image file", status=400)
+    secured_filename = secure_filename(uploaded_file.filename)
+    logger.info(f"'file_name': {secured_filename}")
+    
+    dest_dir = origin_file_path.split('/')[-2]
+    logger.info(f"'dest_dir': {dest_dir}")
+    if dest_dir not in ['images', 'files']:
+        return Response("Directory not allowed", status=403)
+    
+    if is_valid_image(uploaded_file):
+        allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'images')
+        logger.info(f"'allowed_path': {allowed_path}")
+    elif is_valid_file(uploaded_file.stream):  # Now check for Word documents
+        allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'files')
+        logger.info(f"'allowed_path': {allowed_path}")
+    else:  
+        logger.warning("Invalid file type")
+        return False 
         
-    elif request.method == 'PUT':
-        file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-        # DEBUG:
-        # print(file_path)
-        if not os.path.exists(file_path):
-            return Response("File does not exist", status=404)
+    logger.info(f"'secured_filename': {secured_filename}")
+    logger.info(f"'allowed_path': {allowed_path}")
+    result_path = os.path.join(allowed_path, secured_filename)
+    logger.info(f"'result_path': {result_path}")
+    return result_path
+
+def get_file_extension(origin_file_path):
+    """_summary_
+
+    Args:
+        origin_file_path (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
+    logger.info("*** 'get_file_extension' was triggered ***")
+    file_extension = origin_file_path.split('.')[-1]
+    logger.info(f"'file_extension': {file_extension}")
+    
+    if file_extension not in ALLOWED_EXTENSIONS['image'] \
+        and file_extension not in ALLOWED_EXTENSIONS['document']:
+        return False
+    return True
+     
+def get_request_directory(req_abs_file_path):
+    """_summary_
+
+    Args:
+        req_abs_file_path (_type_): _description_
+    """
+    logger.info("*** 'get_request_directory' was triggered ***")
+    
+    parts = req_abs_file_path.split('/')
+    return '/'.join(parts[:-1])
+    
+def is_valid_file_path(origin_file_path):
+    """_summary_
+
+    Args:
+        file_path (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
+    logger.info(f"*** 'is_valid_file_path' was triggered ***")
+    
+    req_abs_file_path = os.path.abspath(os.path.normpath(os.path.join(app.config['MEDIA_FILES_DEST'], origin_file_path)))
+    logger.info(f"'req_abs_file_path': {req_abs_file_path}")
+    
+    media_abs_path = os.path.abspath(app.config['MEDIA_FILES_DEST'])
+    logger.info(f"'media_abs_path': {media_abs_path}")
+    
+    allowed_dirs = [ os.path.join(media_abs_path, directory) for directory in ALLOWED_DIRECTORIES ]
+    logger.info(f"'allowed_dirs': {allowed_dirs}")
+    
+    req_dir = get_request_directory(req_abs_file_path)
+    logger.info(f"'req_dir': {req_dir}")
+    
+    if os.path.exists(req_dir) and req_abs_file_path.startswith(media_abs_path):
+        if req_dir in allowed_dirs:
+            return True
+    logger.warning(f"'req_abs_file_path': {req_abs_file_path}")
+    return False
+
+def allowed_path_and_extension(origin_file_path):
+    """    
+    Should be called in 'upload_file' before 'path_secure()'.
+    Performs check by file extension only (from origin file path).
+    If 'origin_path' != 'allowed_path' return False without checking file extension.
+    _summary_
+
+    Args:
+        file_path (_type_): _description_
+
+    Returns:
+        Bool: _description_
+    """
+    logger.info("*** 'allowed_path_and_extension' was triggered ***")
+    logger.info(f"'origin_file_path': {origin_file_path}")
+    
+    if is_valid_file_path(origin_file_path) and get_file_extension(origin_file_path):
+        return True
+    return False
+
+def handle_upload(origin_file_path):
+    """
+    - function should perform a superficial check if file type is allowed at first (by extension - 'allowed_path_and_extension');
+    - after that should secure it's destination path ('path_secure')
+    """
+
+    logger.info("*** 'handle_upload' was triggered ***")
+    logger.info(f"'origin_file_path': {origin_file_path}")
+
+    if 'file' not in request.files:
+        logger.warning("'file' not in 'request.files'")
+        logger.warning(f"{request.files}")
+        return Response("No file part", status=400)
+    
+    uploaded_file = request.files['file']
+    logger.info(f"'uploaded_file': {uploaded_file}")
+    
+    if uploaded_file.stream.tell() > app.config['MAX_CONTENT_LENGTH']:
+        logger.warning("File size exceeds allowed limit")
+        return Response("File size exceeds allowed limit", status=413)
+    
+    if uploaded_file.filename == '':
+        logger.warning("uploaded_file.filename == ''")
+        return Response("Empty filename", status=400)
         
-        if 'file' not in request.files:
-            return Response("No file part", status=400)
-
-        uploaded_file = request.files['file']
-        # DEBUG:
-        # print(uploaded_file)
-        if uploaded_file.filename == '':
-            return Response("No selected file", status=400)
+    try:
+        if allowed_path_and_extension(origin_file_path):
+            logger.info("passed 'if allowed_path_and_extension(origin_file_path)'")
+            secured_path = path_secure(origin_file_path)
+            logger.info(f"'secured_path': {secured_path}")
+            uploaded_file.save(secured_path)
+            logger.info("SUCCESS")
+            return True
+    except Exception as e:
+        logger.info(f"Exception: {e}")
+        logger.warning(f"!!! 'handle_upload' failed !!!")
+        return False
+    
+@app.route('/media/<path:origin_file_path>', methods=['POST'])
+@check_api_key
+def upload_file(origin_file_path):    
+    logger.info("*** 'upload_file' was triggered ***")
+    logger.info("'POST' method detected")
+    logger.info(f"'origin_file_path': {origin_file_path}")
         
-        if not allowed_file(uploaded_file.filename):
-            return Response("File type not allowed", status=400)
-        else:
-            uploaded_filename = secure_filename(uploaded_file.filename)
-            uploaded_file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], uploaded_filename) 
-            # Remove the old file and replace it with the new one
-            os.remove(file_path)
-            uploaded_file.save(uploaded_file_path)
-            # DEBUG:
-            # print(file_path)
-            os.rename(uploaded_file_path, file_path)
-            return Response("File was updated successfully", status=200)
-
-        # # validate_image() duplicates allowed_file()
-        # if validate_image(uploaded_file.filename):             
-        #     uploaded_filename = secure_filename(uploaded_file.filename)
-        #     uploaded_file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], uploaded_filename) 
-        #     # Remove the old file and replace it with the new one
-        #     os.remove(file_path)
-        #     uploaded_file.save(uploaded_file_path)
-        #     # DEBUG:
-        #     # print(file_path)
-        #     os.rename(uploaded_file_path, file_path)
-        #     return Response("File was updated successfully", status=200)
-        # else:
-        #     return Response("Not an image file", status=400)
-
-    elif request.method == 'DELETE':
-        file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)  # Remove the file
-            return Response("File was deleted successfully", status=200)
-        else:
-            return Response("File not found", status=404)
-    return Response("Unsupported method", status=405)
-
-
+    if handle_upload(origin_file_path):
+        return Response("OK", status=200)
+    return Response("Error uploading file", status=501)
 
 if __name__ == '__main__':
     app.run()
-
-# # media/images/zystrich3.jpg
-# @app.route('/test', methods=['GET'])
-# def test():
-#     filename = 'zystrich3.jpg'
-#     file_path = os.path.join(app.config['UPLOADED_IMAGES_DEST'], filename)
-#     print(file_path)
-#     with open(file_path, 'rb') as file:
-#         content = file.read()
-#     return Response(content, mimetype='application/octet-stream')
+    
