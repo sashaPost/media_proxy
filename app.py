@@ -1,5 +1,4 @@
 from flask import Blueprint, Flask, Response, request, send_from_directory, jsonify
-# import imghdr   # Determine the type of an image
 from werkzeug.utils import secure_filename
 import os
 import secrets
@@ -11,17 +10,21 @@ import magic
 import docx
 import io
 
+from dotenv import load_dotenv
+
+
+
+load_dotenv() 
 
 app = Flask(__name__)
 setup_blueprint = Blueprint('setup', __name__)
 
 app.config['SECRET_KEY'] = str(secrets.SystemRandom().getrandbits(128))
 app.config['MAX_CONTENT_LENGTH'] = 24 * 1024 * 1024    # Limit file size to 24MB
+
 ALLOWED_EXTENSIONS = {'image': set(['jpeg', 'jpg', 'png', 'gif']),
                                     'document': set(['docx', 'pdf'])}
 ALLOWED_DIRECTORIES = ['images', 'files']
-# app.config['UPLOADED_IMAGES_DEST'] = 'media/images'
-# app.config['UPLOADED_FILES_DEST'] = 'media/files'
 app.config['MEDIA_FILES_DEST'] = 'media'
 app.config['ENV'] = 'production'
 app.config['DEBUG'] = False
@@ -37,7 +40,7 @@ console_handler.setFormatter(formatter)
 
 logger.addHandler(console_handler)
 
-API_KEY = "api_key"
+API_KEY = os.getenv('API_KEY')
 
 
 
@@ -286,7 +289,7 @@ def upload_file(origin_file_path):
     logger.info("*** 'upload_file' was triggered ***")
     logger.info("'POST' method detected")
     logger.info(f"'origin_file_path': {origin_file_path}")
-    
+        
     if handle_upload(origin_file_path):
         return Response("OK", status=200)
     return Response("Error uploading file", status=501)
