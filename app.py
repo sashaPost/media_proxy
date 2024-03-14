@@ -85,62 +85,77 @@ def handle_get_request(file_path):
         return Response("Unsupported method", status=405)
             
 def is_valid_image(uploaded_file):
-    """_summary_
+    """Checks if an uploaded file is a valid image.
 
     Args:
-        uploaded_file (_type_): _description_
+        uploaded_file (FileStorage): The Flask uploaded file object.
 
     Returns:
-        Bool: _description_
+        bool: True if the file is a valid image, False otherwise.
     """
     logger.info("*** 'is_valid_image' was triggered ***") 
     
     stream = uploaded_file.stream
     mime = magic.Magic()
-    # file_type_description = mime.from_buffer(file_stream.read(1024))
     file_type_description = mime.from_buffer(stream.read(4096))
     stream.seek(0)
     logger.info(f"'file_type_description': {file_type_description}")
     
     logger.info(f"'uploaded_file.content_type': {uploaded_file.content_type}")
     
-    if uploaded_file.content_type.startswith('image/'):
-        try:
-            Image.open(uploaded_file.stream)
-            logger.info(f"'Image.open(uploaded_file.stream)': {Image.open(uploaded_file.stream)}")
-            return True
-        except (IOError, OSError) as e:
-            logger.warning(f"Failed to open image using Pillow: {e}")
-            return False   
+    try:
+        Image.open(uploaded_file.stream)
+        logger.info(f"'Image.open(uploaded_file.stream)': {Image.open(uploaded_file.stream)}")
+        return True
+    except (IOError, OSError) as e:
+        logger.warning(f"Failed to open image using Pillow: {e}")
+        return False   
     
-def is_valid_file(file_stream):
-    """_summary_
+def is_valid_file(uploaded_file):
+    """Checks if an uploaded file is a valid document (currently supports .docx).
 
     Args:
-        file_stream (_type_): _description_
+        uploaded_file (FileStorage): The Flask uploaded file object.
 
     Returns:
-        Bool: _description_
+        bool: True if the file is a valid document, False otherwise.
     """
     logger.info("* 'is_valid_file' was triggered *") 
-    logger.info(f"'file_stream': {file_stream}") 
+    logger.info(f"'uploaded_file': {uploaded_file}") 
     
-    file_bytes = file_stream.read()
+    mime = magic.Magic()
+    file_type_description = mime.from_buffer(uploaded_file.stream.read(4096))
+    uploaded_file.stream.seek(0)
+    logger.info(f"'file_type_description': {file_type_description}")
+        
     try: 
-        document = docx.Document(io.BytesIO(file_bytes))
+        document = docx.Document(io.BytesIO(uploaded_file.read()))
         logger.info(f"'document': {document}")
         return True
     except docx.opc.exceptions.PackageNotFoundError as e:
-        logger.warning(f"{e}")
+        logger.warning(f"Not a valid Word document ({e})")
+        return False
+    except Exception as e:
+        logger.warning(f"Error processing document ({e})")
         return False
         
-def path_secure(origin_file_path):
-    """
-    
+def path_secure(origin_file_path, file_key):
+    """Secures the destination path for an uploaded file.
+
+    Determines the appropriate subdirectory ('images' or 'files') based on 
+    file type and constructs a safe, sanitized filename.
+
+    Args:
+        origin_file_path (str): The original file path provided by the user.
+        file_key (str): Key in the 'request.files' dictionary ('image' or 'file').
+
+    Returns:
+        str: The secured file path ready for saving the uploaded file.
+        None: If an error occurs (e.g., invalid file type).
     """
     logger.info("*** 'path_secure' triggered ***")
     
-    uploaded_file = request.files['file']
+    uploaded_file = request.files[file_key]
     logger.info(f"'uploaded_file': {uploaded_file}")
 
     secured_filename = secure_filename(uploaded_file.filename)
@@ -154,7 +169,7 @@ def path_secure(origin_file_path):
     if is_valid_image(uploaded_file):
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'images')
         logger.info(f"'allowed_path': {allowed_path}")
-    elif is_valid_file(uploaded_file.stream):  # Now check for Word documents
+    elif is_valid_file(uploaded_file):  
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'files')
         logger.info(f"'allowed_path': {allowed_path}")
     else:  
@@ -242,6 +257,7 @@ def allowed_path_and_extension(origin_file_path):
     logger.info(f"'origin_file_path': {origin_file_path}")
     
     if is_valid_file_path(origin_file_path) and get_file_extension(origin_file_path):
+        logger.info("'allowed_path_and_extension' retruns True")
         return True
     return False
 
@@ -253,36 +269,48 @@ def handle_upload(origin_file_path):
 
     logger.info("*** 'handle_upload' was triggered ***")
     logger.info(f"'origin_file_path': {origin_file_path}")
+    logger.info(f"'request.files': {request.files}")
 
-    if 'file' not in request.files:
-        logger.warning("'file' not in 'request.files'")
-        logger.warning(f"{request.files}")
+    if 'image' not in request.files and 'file' not in request.files:
+        # logger.warning("'file' not in 'request.files'")
+        logger.warning(f"'request.files': {request.files}")
         return Response("No file part", status=400)
     
-    uploaded_file = request.files['file']
-    logger.info(f"'uploaded_file': {uploaded_file}")
-    
-    if uploaded_file.stream.tell() > app.config['MAX_CONTENT_LENGTH']:
-        logger.warning("File size exceeds allowed limit")
-        return Response("File size exceeds allowed limit", status=413)
-    
-    if uploaded_file.filename == '':
-        logger.warning("uploaded_file.filename == ''")
-        return Response("Empty filename", status=400)
-        
+    file_key = 'image' if 'image' in request.files else 'file' 
     try:
-        if allowed_path_and_extension(origin_file_path):
-            logger.info("passed 'if allowed_path_and_extension(origin_file_path)'")
-            secured_path = path_secure(origin_file_path)
-            logger.info(f"'secured_path': {secured_path}")
-            uploaded_file.save(secured_path)
-            logger.info("SUCCESS")
-            return True
+        uploaded_file = request.files[file_key]
+        logger.info(f"'uploaded_file': {uploaded_file}")
+        
+        if uploaded_file.stream.tell() > app.config['MAX_CONTENT_LENGTH']:
+            logger.warning("File size exceeds allowed limit")
+            return Response("File size exceeds allowed limit", status=413)
+        
+        if uploaded_file.filename == '':
+            logger.warning("uploaded_file.filename == ''")
+            return Response("Empty filename", status=400)
+            
+        try:
+            if allowed_path_and_extension(origin_file_path):
+                logger.info("passed 'if allowed_path_and_extension(origin_file_path)'")
+                secured_path = path_secure(origin_file_path, file_key)
+                logger.info(f"'secured_path': {secured_path}")
+                
+                with open(secured_path, 'wb') as destination_file: 
+                    uploaded_file.save(destination_file)
+                os.chmod(secured_path, 0o755)  
+                logger.info("SUCCESS")
+                return True
+            else:
+                logger.warning("!!! 'if allowed_path_and_extension' failed !!!")
+                return False
+        except Exception as e:
+            logger.info(f"Exception: {e}")
+            logger.warning(f"!!! 'handle_upload' failed !!!")
+            return False
     except Exception as e:
         logger.info(f"Exception: {e}")
-        logger.warning(f"!!! 'handle_upload' failed !!!")
         return False
-    
+        
 @app.route('/media/<path:origin_file_path>', methods=['POST'])
 @check_api_key
 def upload_file(origin_file_path):    

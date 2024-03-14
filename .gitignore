@@ -11,4 +11,3 @@ tests/
 *.ini
 *.pyc
 *.sock
-wsgi.py
