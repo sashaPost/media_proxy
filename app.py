@@ -151,7 +151,8 @@ def path_secure(origin_file_path, file_key):
 
     Returns:
         str: The secured file path ready for saving the uploaded file.
-        None: If an error occurs (e.g., invalid file type).
+        None: If a directory traversal is attempted.
+        False: If an invalid file type is detected.
     """
     logger.info("*** 'path_secure' triggered ***")
     
@@ -183,13 +184,16 @@ def path_secure(origin_file_path, file_key):
     return result_path
 
 def get_file_extension(origin_file_path):
-    """_summary_
+    """Determines whether the file extension in the provided path is allowed.
+
+    Checks if the extracted file extension exists in the list of allowed 
+    extensions for images or documents.
 
     Args:
-        origin_file_path (_type_): _description_
+        origin_file_path (str): The file path to be analyzed.
 
     Returns:
-        Bool: _description_
+        bool: True if the file extension is supported, False otherwise.
     """
     logger.info("*** 'get_file_extension' was triggered ***")
     file_extension = origin_file_path.split('.')[-1]
@@ -201,24 +205,35 @@ def get_file_extension(origin_file_path):
     return True
      
 def get_request_directory(req_abs_file_path):
-    """_summary_
+    """Splits the absolute file path by the '/' separator and rejoins all 
+    elements except the last one (the filename), providing the directory.
 
     Args:
-        req_abs_file_path (_type_): _description_
+        req_abs_file_path (str): The absolute file path to process.
+
+    Returns:
+        str: The extracted directory absolute path.
     """
     logger.info("*** 'get_request_directory' was triggered ***")
+    logger.info(f"'req_abs_file_path': {req_abs_file_path}")
     
     parts = req_abs_file_path.split('/')
+    logger.info(f"directory: {'/'.join(parts[:-1])}")
     return '/'.join(parts[:-1])
     
 def is_valid_file_path(origin_file_path):
-    """_summary_
+    """Validates a file path for security and allowed locations.
+
+    Checks if the constructed absolute file path:
+        * Resides within the configured media directory.
+        * Points to an existing directory.
+        * Belongs to a specifically allowed subdirectory.
 
     Args:
-        file_path (_type_): _description_
+        origin_file_path (str): The relative file path provided in the request.
 
     Returns:
-        Bool: _description_
+        bool: True if the file path is valid, False otherwise.
     """
     logger.info(f"*** 'is_valid_file_path' was triggered ***")
     
@@ -241,17 +256,18 @@ def is_valid_file_path(origin_file_path):
     return False
 
 def allowed_path_and_extension(origin_file_path):
-    """    
-    Should be called in 'upload_file' before 'path_secure()'.
-    Performs check by file extension only (from origin file path).
-    If 'origin_path' != 'allowed_path' return False without checking file extension.
-    _summary_
+    """Checks if a file path is valid and has an allowed extension.
+
+    Performs the following validations:
+        *  The file path must be valid according to security and location constraints.
+           (`is_valid_file_path` check).
+        *  The file must have a supported file extension (`get_file_extension` check).
 
     Args:
-        file_path (_type_): _description_
+        origin_file_path (str): The relative file path provided in the request.
 
     Returns:
-        Bool: _description_
+        bool: True if the path is valid and the extension is allowed, False otherwise.
     """
     logger.info("*** 'allowed_path_and_extension' was triggered ***")
     logger.info(f"'origin_file_path': {origin_file_path}")
@@ -262,11 +278,24 @@ def allowed_path_and_extension(origin_file_path):
     return False
 
 def handle_upload(origin_file_path):
-    """
-    - function should perform a superficial check if file type is allowed at first (by extension - 'allowed_path_and_extension');
-    - after that should secure it's destination path ('path_secure')
-    """
+    """Coordinates the file upload process, performing validations and saving.
 
+    Handles the following steps:
+        * Checks if a valid file ('image' or 'file') is present in the request.
+        * Validates the file size against the configured maximum limit.
+        * Checks for an empty filename.
+        * Ensures the file path is allowed and has a supported extension.
+        * Secures the destination path.
+        * Saves the uploaded file to disk and sets appropriate permissions.
+
+    Args:
+        origin_file_path (str): The relative file path provided in the request.
+
+    Returns:
+        True:  If the upload process is successful.
+        False: If any validation fails or an error occurs during the upload.
+        Response:  If no suitable file is found in the request or the file size is too large.
+    """
     logger.info("*** 'handle_upload' was triggered ***")
     logger.info(f"'origin_file_path': {origin_file_path}")
     logger.info(f"'request.files': {request.files}")
@@ -314,6 +343,16 @@ def handle_upload(origin_file_path):
 @app.route('/media/<path:origin_file_path>', methods=['POST'])
 @check_api_key
 def upload_file(origin_file_path):    
+    """Handles file upload requests.
+
+    Performs the following:
+        * Logs the request.
+        * Delegates the upload process to the `handle_upload` function.
+        * Returns an appropriate response (success or error) based on the result of `handle_upload`.
+
+    Args:
+        origin_file_path (str): The relative file path extracted from the URL.
+    """
     logger.info("*** 'upload_file' was triggered ***")
     logger.info("'POST' method detected")
     logger.info(f"'origin_file_path': {origin_file_path}")

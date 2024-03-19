@@ -3,9 +3,10 @@ __pycache__/
 .vscode/
 .git/
 3.10_venv/
+.pytest_cache/
 
 media/
-tests/
+# tests/
 
 .env
 *.ini
