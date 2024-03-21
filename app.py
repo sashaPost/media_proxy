@@ -50,6 +50,7 @@ def directories_check():
     Creates media directories on first request.
     """
     logger.info("*** 'directories_check' was triggered ***")
+    # dest_dir = None
     try:
         os.makedirs(app.config['MEDIA_FILES_DEST'], exist_ok=True)
         for directory in ALLOWED_DIRECTORIES:
@@ -104,8 +105,13 @@ def is_valid_image(uploaded_file):
     logger.info(f"'uploaded_file.content_type': {uploaded_file.content_type}")
     
     try:
-        Image.open(uploaded_file.stream)
-        logger.info(f"'Image.open(uploaded_file.stream)': {Image.open(uploaded_file.stream)}")
+        img = Image.open(uploaded_file.stream)
+        logger.info(f"'Image.open(uploaded_file.stream)': {img}")
+        # logger.info(dir(img))
+        # file_type = img.format.lower()
+        # logger.info(f"'file_type': {file_type}")
+        # if file_type not in ALLOWED_EXTENSIONS['image']:
+        #     return False
         return True
     except (IOError, OSError) as e:
         logger.warning(f"Failed to open image using Pillow: {e}")
@@ -155,6 +161,8 @@ def path_secure(origin_file_path, file_key):
         False: If an invalid file type is detected.
     """
     logger.info("*** 'path_secure' triggered ***")
+    
+    logger.info(f"'file_key': {file_key}")
     
     uploaded_file = request.files[file_key]
     logger.info(f"'uploaded_file': {uploaded_file}")
@@ -237,6 +245,8 @@ def is_valid_file_path(origin_file_path):
     """
     logger.info(f"*** 'is_valid_file_path' was triggered ***")
     
+    logger.info(f"'origin_file_path': {origin_file_path}")
+    
     req_abs_file_path = os.path.abspath(os.path.normpath(os.path.join(app.config['MEDIA_FILES_DEST'], origin_file_path)))
     logger.info(f"'req_abs_file_path': {req_abs_file_path}")
     
@@ -310,9 +320,7 @@ def handle_upload(origin_file_path):
         uploaded_file = request.files[file_key]
         logger.info(f"'uploaded_file': {uploaded_file}")
         
-        if uploaded_file.stream.tell() > app.config['MAX_CONTENT_LENGTH']:
-            logger.warning("File size exceeds allowed limit")
-            return Response("File size exceeds allowed limit", status=413)
+        # There's no need in file size check implementation - Werkzeug is responsible for that by default 
         
         if uploaded_file.filename == '':
             logger.warning("uploaded_file.filename == ''")

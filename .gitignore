@@ -6,9 +6,12 @@ __pycache__/
 .pytest_cache/
 
 media/
-# tests/
+htmlcov/
 
 .env
+.list_env_vars.py
+
 *.ini
 *.pyc
 *.sock
+*.old
