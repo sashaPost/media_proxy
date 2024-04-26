@@ -9,21 +9,21 @@ from PIL import Image
 import magic
 import docx
 import io
-
+from PyPDF2 import PdfReader
+from PyPDF2.errors import PdfReadError
 from dotenv import load_dotenv
-
 
 
 load_dotenv() 
 
 app = Flask(__name__)
 setup_blueprint = Blueprint('setup', __name__)
-
 app.config['SECRET_KEY'] = str(secrets.SystemRandom().getrandbits(128))
 app.config['MAX_CONTENT_LENGTH'] = 24 * 1024 * 1024    # Limit file size to 24MB
 
+API_KEY = os.getenv('API_KEY')
 ALLOWED_EXTENSIONS = {'image': set(['jpeg', 'jpg', 'png', 'gif']),
-                                    'document': set(['docx', 'pdf'])}
+                                    'document': set(['docx', 'pdf'])}   # !!! add '.doc' !!!
 ALLOWED_DIRECTORIES = ['images', 'files']
 app.config['MEDIA_FILES_DEST'] = 'media'
 app.config['ENV'] = 'production'
@@ -31,17 +31,11 @@ app.config['DEBUG'] = False
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.DEBUG)
-
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 console_handler.setFormatter(formatter)
-
 logger.addHandler(console_handler)
-
-API_KEY = os.getenv('API_KEY')
-
 
 
 @setup_blueprint.before_app_request
@@ -59,7 +53,9 @@ def directories_check():
     except OSError as e:
         logger.error(f"Failed to create directory {dest_dir}: {e}")
 
+
 app.register_blueprint(setup_blueprint)
+
 
 def check_api_key(func):
     @wraps(func)
@@ -69,6 +65,7 @@ def check_api_key(func):
             return jsonify({"error": "Unauthorized"}), 401
         return func(*args, **kwargs)
     return wrapper
+
 
 # implements the GET method logic:
 @app.route('/media/<path:file_path>', methods=['GET'])
@@ -84,6 +81,7 @@ def handle_get_request(file_path):
         return Response("File not found", status=404)
     except Exception as e:
         return Response("Unsupported method", status=405)
+            
             
 def is_valid_image(uploaded_file):
     """Checks if an uploaded file is a valid image.
@@ -117,33 +115,95 @@ def is_valid_image(uploaded_file):
         logger.warning(f"Failed to open image using Pillow: {e}")
         return False   
     
-def is_valid_file(uploaded_file):
-    """Checks if an uploaded file is a valid document (currently supports .docx).
+    
+def is_valid_docx(uploaded_file):
+    """Checks if an uploaded file is a valid .docx document.
 
     Args:
         uploaded_file (FileStorage): The Flask uploaded file object.
 
     Returns:
-        bool: True if the file is a valid document, False otherwise.
+        bool: True if the file is a valid .docx document, False otherwise.
+    """
+    logger.info(f"'is_valid_docx' was triggered")
+    logger.info("Validating DOCX file...")
+
+    try: 
+        document = docx.Document(io.BytesIO(uploaded_file.read()))
+        logger.info(f"'document': {document}")
+        logger.info("DOCX file validated successfully.")
+        return True
+    except docx.opc.exceptions.PackageNotFoundError as e:
+        logger.warning(f"Not a valid DOCX file: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error processing DOCX file: {e}")
+        return False
+        
+    
+def is_valid_pdf(uploaded_file):
+    """Checks if an uploaded file is a valid .pdf document.
+
+    Args:
+        uploaded_file (FileStorage): The Flask uploaded file object.
+
+    Returns:
+        bool: True if the file is a valid .pdf document, False otherwise.
+    """
+    logger.info("* 'is_valid_pdf' was triggered *")
+    logger.info("Validating PDF file...")
+    
+    try:
+        # pdf_obj = PdfReader(uploaded_file)
+        # logger.info(f"'pdf_obj': {pdf_obj}\n'type': {type(pdf_obj)}")
+        # if pdf_obj:
+        #     return True
+        PdfReader(uploaded_file)  # Simpler validation check is sufficient
+        logger.info("PDF file validated successfully.")
+        return True
+    except PdfReadError as e:
+        logger.warning(f"Not a valid PDF file: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error processing PDF file: {e}")
+        return False
+    
+    
+def is_valid_file(uploaded_file):
+    """Determines if an uploaded file is a valid .docx or .pdf document.
+
+    Args:
+        uploaded_file (FileStorage): The Flask uploaded file object.
+
+    Returns:
+        bool: True if the file is valid, False otherwise.
     """
     logger.info("* 'is_valid_file' was triggered *") 
+    
     logger.info(f"'uploaded_file': {uploaded_file}") 
+    
+    file_extension = uploaded_file.filename.split('.')[-1].lower()  
+    logger.info(f"'file_extension': {file_extension}")
     
     mime = magic.Magic()
     file_type_description = mime.from_buffer(uploaded_file.stream.read(4096))
     uploaded_file.stream.seek(0)
     logger.info(f"'file_type_description': {file_type_description}")
         
-    try: 
-        document = docx.Document(io.BytesIO(uploaded_file.read()))
-        logger.info(f"'document': {document}")
-        return True
-    except docx.opc.exceptions.PackageNotFoundError as e:
-        logger.warning(f"Not a valid Word document ({e})")
+    if file_extension == 'docx':
+        logger.info("Uploaded file was recognized as '.docx'.")
+        # if is_valid_docx(uploaded_file):
+        #     return True
+        return is_valid_docx(uploaded_file)
+    elif file_extension == 'pdf':
+        logger.info("Uploaded file was recognized as '.pdf'.")
+        # if is_valid_pdf(uploaded_file):
+        #     return True
+        return is_valid_pdf(uploaded_file)
+    else:
+        logger.warning(f"Unsupported file type: {file_type_description}")
         return False
-    except Exception as e:
-        logger.warning(f"Error processing document ({e})")
-        return False
+        
         
 def path_secure(origin_file_path, file_key):
     """Secures the destination path for an uploaded file.
@@ -179,6 +239,7 @@ def path_secure(origin_file_path, file_key):
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'images')
         logger.info(f"'allowed_path': {allowed_path}")
     elif is_valid_file(uploaded_file):  
+        
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'files')
         logger.info(f"'allowed_path': {allowed_path}")
     else:  
