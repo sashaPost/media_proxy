@@ -11,6 +11,9 @@ import docx
 import io
 from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
+# from oletools import olevba
+# from olefile import OleFileIO
+import olefile
 from dotenv import load_dotenv
 
 
@@ -23,7 +26,7 @@ app.config['MAX_CONTENT_LENGTH'] = 24 * 1024 * 1024    # Limit file size to 24MB
 
 API_KEY = os.getenv('API_KEY')
 ALLOWED_EXTENSIONS = {'image': set(['jpeg', 'jpg', 'png', 'gif']),
-                                    'document': set(['docx', 'pdf'])}   # !!! add '.doc' !!!
+                                    'document': set(['docx', 'pdf', 'doc'])}   
 ALLOWED_DIRECTORIES = ['images', 'files']
 app.config['MEDIA_FILES_DEST'] = 'media'
 app.config['ENV'] = 'production'
@@ -60,7 +63,8 @@ app.register_blueprint(setup_blueprint)
 def check_api_key(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        logger.info(request.headers.get("Authorization"))
+        logger.info(f"Request API key: {request.headers.get('Authorization')}")
+        logger.info(f"Source API key: {API_KEY}")
         if request.headers.get("Authorization") != API_KEY:
             return jsonify({"error": "Unauthorized"}), 401
         return func(*args, **kwargs)
@@ -114,6 +118,30 @@ def is_valid_image(uploaded_file):
     except (IOError, OSError) as e:
         logger.warning(f"Failed to open image using Pillow: {e}")
         return False   
+            
+    
+def is_valid_pdf(uploaded_file):
+    """Checks if an uploaded file is a valid .pdf document.
+
+    Args:
+        uploaded_file (FileStorage): The Flask uploaded file object.
+
+    Returns:
+        bool: True if the file is a valid .pdf document, False otherwise.
+    """
+    logger.info("* 'is_valid_pdf' was triggered *")
+    logger.info("Validating PDF file...")
+    
+    try:
+        PdfReader(uploaded_file)  # Simpler validation check is sufficient
+        logger.info("PDF file validated successfully.")
+        return True
+    except PdfReadError as e:
+        logger.warning(f"Not a valid PDF file: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Error processing PDF file: {e}")
+        return False
     
     
 def is_valid_docx(uploaded_file):
@@ -139,35 +167,52 @@ def is_valid_docx(uploaded_file):
     except Exception as e:
         logger.error(f"Error processing DOCX file: {e}")
         return False
-        
     
-def is_valid_pdf(uploaded_file):
-    """Checks if an uploaded file is a valid .pdf document.
+    
+def is_valid_doc(uploaded_file):
+    """Checks if an uploaded file is a valid .doc document.
 
     Args:
         uploaded_file (FileStorage): The Flask uploaded file object.
 
     Returns:
-        bool: True if the file is a valid .pdf document, False otherwise.
+        bool: True if the file is a valid .doc document, False otherwise.
     """
-    logger.info("* 'is_valid_pdf' was triggered *")
-    logger.info("Validating PDF file...")
-    
+    logger.info(f"'is_valid_doc' was triggered")
+    logger.info("Validating DOC file...")
+
     try:
-        # pdf_obj = PdfReader(uploaded_file)
-        # logger.info(f"'pdf_obj': {pdf_obj}\n'type': {type(pdf_obj)}")
-        # if pdf_obj:
-        #     return True
-        PdfReader(uploaded_file)  # Simpler validation check is sufficient
-        logger.info("PDF file validated successfully.")
-        return True
-    except PdfReadError as e:
-        logger.warning(f"Not a valid PDF file: {e}")
-        return False
+        file_contents = uploaded_file.read()
+        ole = olefile.OleFileIO(io.BytesIO(file_contents))
+        
+        logger.info(f"Available attributes of 'ole': {dir(ole)}")     
+        # for attr in dir(ole):
+        #     if hasattr(ole, attr):
+        #         value = getattr(ole, attr)
+        #         logger.info(f"{attr}: {value}")
+        
+        root = ole.root
+        logger.info(f"'root': {root}")
+        
+        logger.info(f"Available attributes of 'root': {dir(root)}")        
+        # for attr in dir(root):
+        #     if hasattr(root, attr):
+        #         value = getattr(root, attr)
+        #         logger.info(f"{attr}: {value}")
+
+        if ole.exists('worddocument'):
+            logger.info("This is a Word document.")
+            if ole.exists('macros/vba'):
+                logger.warning("Document contains macros. Consider potential security risks.")
+            logger.info("DOC file was validated successfully")
+            return True
+        else:
+            logger.warning("File is not a valid DOC file (missing 'worddocument' stream).")
+            return False
     except Exception as e:
-        logger.error(f"Error processing PDF file: {e}")
+        logger.warning(f"Error processing DOC file: {e}")
         return False
-    
+
     
 def is_valid_file(uploaded_file):
     """Determines if an uploaded file is a valid .docx or .pdf document.
@@ -185,24 +230,41 @@ def is_valid_file(uploaded_file):
     file_extension = uploaded_file.filename.split('.')[-1].lower()  
     logger.info(f"'file_extension': {file_extension}")
     
+    stream = uploaded_file.stream
     mime = magic.Magic()
-    file_type_description = mime.from_buffer(uploaded_file.stream.read(4096))
-    uploaded_file.stream.seek(0)
+    file_type_description = mime.from_buffer(stream.read(4096))
+    stream.seek(0)
     logger.info(f"'file_type_description': {file_type_description}")
+    
+    
+    match file_extension:
+        case 'docx':
+            logger.info("Uploaded file was recognized as '.docx'.")
+            return is_valid_docx(uploaded_file)
+        case 'pdf':
+            logger.info("Uploaded file was recognized as '.pdf'.")
+            return is_valid_pdf(uploaded_file)
+        case 'doc':
+            logger.info("Uploaded file was recognized as '.doc'.")
+            return is_valid_doc(uploaded_file)
+            # return True
+        case _:
+            logger.warning(f"Unsupported file type: {file_type_description}\n'file_extension': {file_extension}")
+            return False
         
-    if file_extension == 'docx':
-        logger.info("Uploaded file was recognized as '.docx'.")
-        # if is_valid_docx(uploaded_file):
-        #     return True
-        return is_valid_docx(uploaded_file)
-    elif file_extension == 'pdf':
-        logger.info("Uploaded file was recognized as '.pdf'.")
-        # if is_valid_pdf(uploaded_file):
-        #     return True
-        return is_valid_pdf(uploaded_file)
-    else:
-        logger.warning(f"Unsupported file type: {file_type_description}")
-        return False
+    # if file_extension == 'docx':
+    #     logger.info("Uploaded file was recognized as '.docx'.")
+    #     # if is_valid_docx(uploaded_file):
+    #     #     return True
+    #     return is_valid_docx(uploaded_file)
+    # elif file_extension == 'pdf':
+    #     logger.info("Uploaded file was recognized as '.pdf'.")
+    #     # if is_valid_pdf(uploaded_file):
+    #     #     return True
+    #     return is_valid_pdf(uploaded_file)
+    # else:
+    #     logger.warning(f"Unsupported file type: {file_type_description}")
+    #     return False
         
         
 def path_secure(origin_file_path, file_key):
@@ -239,7 +301,6 @@ def path_secure(origin_file_path, file_key):
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'images')
         logger.info(f"'allowed_path': {allowed_path}")
     elif is_valid_file(uploaded_file):  
-        
         allowed_path = os.path.join(app.config['MEDIA_FILES_DEST'], 'files')
         logger.info(f"'allowed_path': {allowed_path}")
     else:  
