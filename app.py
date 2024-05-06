@@ -185,7 +185,7 @@ def is_valid_doc(uploaded_file):
         file_contents = uploaded_file.read()
         ole = olefile.OleFileIO(io.BytesIO(file_contents))
         
-        logger.info(f"Available attributes of 'ole': {dir(ole)}")     
+        # logger.info(f"Available attributes of 'ole': {dir(ole)}")     
         # for attr in dir(ole):
         #     if hasattr(ole, attr):
         #         value = getattr(ole, attr)
@@ -194,7 +194,7 @@ def is_valid_doc(uploaded_file):
         root = ole.root
         logger.info(f"'root': {root}")
         
-        logger.info(f"Available attributes of 'root': {dir(root)}")        
+        # logger.info(f"Available attributes of 'root': {dir(root)}")        
         # for attr in dir(root):
         #     if hasattr(root, attr):
         #         value = getattr(root, attr)
@@ -204,7 +204,10 @@ def is_valid_doc(uploaded_file):
             logger.info("This is a Word document.")
             if ole.exists('macros/vba'):
                 logger.warning("Document contains macros. Consider potential security risks.")
+                ole.close()
+                return False
             logger.info("DOC file was validated successfully")
+            ole.close()
             return True
         else:
             logger.warning("File is not a valid DOC file (missing 'worddocument' stream).")
@@ -251,20 +254,6 @@ def is_valid_file(uploaded_file):
         case _:
             logger.warning(f"Unsupported file type: {file_type_description}\n'file_extension': {file_extension}")
             return False
-        
-    # if file_extension == 'docx':
-    #     logger.info("Uploaded file was recognized as '.docx'.")
-    #     # if is_valid_docx(uploaded_file):
-    #     #     return True
-    #     return is_valid_docx(uploaded_file)
-    # elif file_extension == 'pdf':
-    #     logger.info("Uploaded file was recognized as '.pdf'.")
-    #     # if is_valid_pdf(uploaded_file):
-    #     #     return True
-    #     return is_valid_pdf(uploaded_file)
-    # else:
-    #     logger.warning(f"Unsupported file type: {file_type_description}")
-    #     return False
         
         
 def path_secure(origin_file_path, file_key):
