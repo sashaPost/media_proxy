@@ -11,10 +11,9 @@ import docx
 import io
 from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
-# from oletools import olevba
-# from olefile import OleFileIO
 import olefile
 from dotenv import load_dotenv
+import tempfile
 
 
 load_dotenv() 
@@ -132,13 +131,22 @@ def is_valid_pdf(uploaded_file):
     logger.info("* 'is_valid_pdf' was triggered *")
     logger.info("Validating PDF file...")
     
+    # logger.info(uploaded_file.read(4))
+    
     try:
-        PdfReader(uploaded_file)  # Simpler validation check is sufficient
-        logger.info("PDF file validated successfully.")
-        return True
-    except PdfReadError as e:
-        logger.warning(f"Not a valid PDF file: {e}")
-        return False
+        if uploaded_file.read(4) == b'%PDF':
+            logger.info("File starts with '%PDF' header (basic check).")
+            # return True
+        
+        with tempfile.NamedTemporaryFile(delete=True) as temp_file:
+            temp_file.write(uploaded_file.read())  # Read entire content into temp file
+            try:
+                PdfReader(temp_file.name)  # Validate using the temporary file
+                logger.info("PDF file validated successfully (PyPDF2).")
+                return True            
+            except PdfReadError as e:
+                logger.warning(f"Not a valid PDF file: {e}")
+                return False
     except Exception as e:
         logger.error(f"Error processing PDF file: {e}")
         return False
@@ -157,8 +165,10 @@ def is_valid_docx(uploaded_file):
     logger.info("Validating DOCX file...")
 
     try: 
-        document = docx.Document(io.BytesIO(uploaded_file.read()))
+        file_content = uploaded_file.read()
+        document = docx.Document(io.BytesIO(file_content))
         logger.info(f"'document': {document}")
+        file_content.seek(0)
         logger.info("DOCX file validated successfully.")
         return True
     except docx.opc.exceptions.PackageNotFoundError as e:
@@ -181,37 +191,34 @@ def is_valid_doc(uploaded_file):
     logger.info(f"'is_valid_doc' was triggered")
     logger.info("Validating DOC file...")
 
-    try:
-        file_contents = uploaded_file.read()
-        ole = olefile.OleFileIO(io.BytesIO(file_contents))
-        
-        # logger.info(f"Available attributes of 'ole': {dir(ole)}")     
-        # for attr in dir(ole):
-        #     if hasattr(ole, attr):
-        #         value = getattr(ole, attr)
-        #         logger.info(f"{attr}: {value}")
-        
-        root = ole.root
-        logger.info(f"'root': {root}")
-        
-        # logger.info(f"Available attributes of 'root': {dir(root)}")        
-        # for attr in dir(root):
-        #     if hasattr(root, attr):
-        #         value = getattr(root, attr)
-        #         logger.info(f"{attr}: {value}")
+    try:      
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=True) as temp_file:
+            # Read the uploaded file in chunks and write to the temporary file
+            for chunk in uploaded_file.stream:
+                temp_file.write(chunk)
+                
+            temp_file_name = temp_file.name
+            
+            ole = olefile.OleFileIO(temp_file_name)
+                
+            root = ole.root
+            logger.info(f"'root': {root}")
 
-        if ole.exists('worddocument'):
-            logger.info("This is a Word document.")
-            if ole.exists('macros/vba'):
-                logger.warning("Document contains macros. Consider potential security risks.")
+            if ole.exists('worddocument'):
+                logger.info("This is a Word document.")
+                if ole.exists('macros/vba'):
+                    logger.warning("Document contains macros. Consider potential security risks.")
+                    ole.close()
+                    return False
+                logger.info("DOC file was validated successfully")
+                ole.close()
+                return True
+            else:
+                logger.warning("File is not a valid DOC file (missing 'worddocument' stream).")
                 ole.close()
                 return False
-            logger.info("DOC file was validated successfully")
-            ole.close()
-            return True
-        else:
-            logger.warning("File is not a valid DOC file (missing 'worddocument' stream).")
-            return False
+        uploaded_file.seek(0)
     except Exception as e:
         logger.warning(f"Error processing DOC file: {e}")
         return False
