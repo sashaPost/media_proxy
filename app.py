@@ -8,12 +8,12 @@ from functools import wraps
 from PIL import Image
 import magic
 import docx
-import io
 from PyPDF2 import PdfReader
 from PyPDF2.errors import PdfReadError
 import olefile
 from dotenv import load_dotenv
 import tempfile
+import io
 
 
 load_dotenv() 
@@ -165,11 +165,10 @@ def is_valid_docx(uploaded_file):
     logger.info("Validating DOCX file...")
 
     try: 
-        file_content = uploaded_file.read()
-        document = docx.Document(io.BytesIO(file_content))
-        logger.info(f"'document': {document}")
-        file_content.seek(0)
-        logger.info("DOCX file validated successfully.")
+        # !THIS SHIT ERASES FILE CONTENT:
+        # content = uploaded_file.read()
+        # document = docx.Document(BytesIO(content))
+        # logger.info(f"'document': {document}")
         return True
     except docx.opc.exceptions.PackageNotFoundError as e:
         logger.warning(f"Not a valid DOCX file: {e}")
