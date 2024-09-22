@@ -426,7 +426,6 @@ def is_valid_file(uploaded_file):
         case 'doc':
             logger.info("Uploaded file was recognized as '.doc'.")
             return is_valid_doc(uploaded_file)
-            # return True
         case _:
             logger.warning(f"Unsupported file type: {file_type_description}\n'file_extension': {file_extension}")
             return False
