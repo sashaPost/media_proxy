@@ -5,6 +5,7 @@ __pycache__/
 3.10_venv/
 .pytest_cache/
 .debug_files/
+.idea/
 
 media/
 htmlcov/
