@@ -316,8 +316,10 @@ def is_valid_doc(uploaded_file):
     Returns:
         bool: True if the file is a valid .doc document, False otherwise.
     """
-    logger.info(f"'is_valid_doc' was triggered")
+    logger.info(f"***'is_valid_doc' was triggered***")
     logger.info("Validating DOC file...")
+
+    # logger.info(f"!!!'uploaded_file': {uploaded_file.filename}")
 
     try:      
         # Create a temporary file
@@ -379,9 +381,8 @@ def is_valid_doc(uploaded_file):
                 return False
 
             # Check file size (arbitrary limit of 10MB)
-            if ole.get_size() > 10 * 1024 * 1024:
+            if os.path.getsize(temp_file.name) > 10 * 1024 * 1024:
                 logger.warning("DOC file is suspiciously large")
-                ole.close()
                 return False
 
             logger.info("DOC file validated successfully")
