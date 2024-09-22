@@ -4,6 +4,7 @@ __pycache__/
 .git/
 3.10_venv/
 .pytest_cache/
+.debug_files/
 
 media/
 htmlcov/
