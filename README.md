@@ -11,7 +11,7 @@ This project provides a REST API for secure media file uploads, supporting image
 *   API key authentication.
 
 ## Requirements
-* Python 3.x 
+* Python 3.x
 * Flask
 * python-docx
 * Pillow (PIL Fork)
@@ -20,7 +20,7 @@ This project provides a REST API for secure media file uploads, supporting image
 ## Installation
 
 1. Clone this repository.
-2. Install dependencies: `pip install -r requirements.txt` 
+2. Install dependencies: `pip install -r requirements.txt`
 
 ## Usage
 
