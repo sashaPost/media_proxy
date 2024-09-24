@@ -1,10 +1,12 @@
 import pytest
-from app import *
+from app import create_app
+from flask import current_app
 import os
 
 
 @pytest.fixture(scope="module")
 def client():
+    app = create_app()
     app.config["TESTING"] = True
     app.config["MEDIA_FILES_DEST"] = "media"
     with app.test_client() as client:
@@ -28,4 +30,4 @@ def invalid_image_data():
 
 @pytest.fixture()
 def media_files_destination():
-    return app.config["MEDIA_FILES_DEST"]
+    return current_app.config["MEDIA_FILES_DEST"]

@@ -1,7 +1,9 @@
 from extensions.logger import logger
 import magic
 import io
-from PyPDF2 import PdfReader
+
+# from PyPDF2 import PdfReader
+from pypdf import PdfReader
 import re
 import zipfile
 import docx
@@ -168,23 +170,25 @@ def is_valid_doc(uploaded_file):
     logger.info("Validating DOC file...")
 
     try:
-        # Create a temporary file
-        with (tempfile.NamedTemporaryFile(delete=True) as temp_file):
-            # Read the uploaded file in chunks and write to the temporary file
-            for chunk in uploaded_file.stream:
-                temp_file.write(chunk)
+        # Read the entire file content into memory
+        file_content = uploaded_file.read()
 
+        # Create a BytesIO object to work with the file content
+        file_stream = io.BytesIO(file_content)
+
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_file.write(file_content)
             temp_file.flush()
             temp_file_name = temp_file.name
 
-            ole = olefile.OleFileIO(temp_file_name)
-
+        # Use olefile to analyze the temporary file
+        with olefile.OleFileIO(temp_file_name) as ole:
             # Check if it's a Word document
             if not ole.exists("WordDocument"):
                 logger.warning(
-                    "File is not a valid DOC file (missing 'WordDocument' " "stream)"
+                    "File is not a valid DOC file (missing 'WordDocument' stream)"
                 )
-                ole.close()
                 return False
 
             # Check for macros
@@ -194,7 +198,6 @@ def is_valid_doc(uploaded_file):
                 or ole.exists("VBA")
             ):
                 logger.warning("Document contains macros. Potential security risk.")
-                ole.close()
                 return False
 
             # Check for external links
@@ -206,17 +209,15 @@ def is_valid_doc(uploaded_file):
                     or b"HTTPS://" in table_data.upper()
                 ):
                     logger.warning(
-                        "Document contains external links. Potential " "security risk."
+                        "Document contains external links. Potential security risk."
                     )
-                    ole.close()
                     return False
 
             # Check for embedded objects
             if ole.exists("ObjectPool"):
                 logger.warning(
-                    "Document contains embedded objects. Potential security " "risk."
+                    "Document contains embedded objects. Potential security risk."
                 )
-                ole.close()
                 return False
 
             # Check document content for potential malicious elements
@@ -226,24 +227,27 @@ def is_valid_doc(uploaded_file):
             # Check Word document for potential script injection
             if re.search(b"<script|javascript:|data:", word_data, re.IGNORECASE):
                 logger.warning("DOC file contains potential script injection")
-                ole.close()
                 return False
 
             # Check for suspicious keywords
             suspicious_keywords = [b"cmd", b"powershell", b"exec", b"system", b"eval"]
             if any(keyword in word_data.lower() for keyword in suspicious_keywords):
                 logger.warning("DOC file contains suspicious keywords")
-                ole.close()
                 return False
 
-            # Check file size (arbitrary limit of 10MB)
-            if os.path.getsize(temp_file.name) > 10 * 1024 * 1024:
-                logger.warning("DOC file is suspiciously large")
-                return False
+        # Check file size (arbitrary limit of 10MB)
+        if len(file_content) > 10 * 1024 * 1024:
+            logger.warning("DOC file is suspiciously large")
+            return False
 
-            logger.info("DOC file validated successfully")
-            ole.close()
-            return True
+        logger.info("DOC file validated successfully")
+
+        # Reset the file pointer to the beginning
+        file_stream.seek(0)
+        uploaded_file.stream = file_stream
+
+        return True
+
     except Exception as e:
         logger.warning(f"Error processing DOC file: {e}")
         return False

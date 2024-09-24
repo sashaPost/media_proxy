@@ -24,15 +24,16 @@ def handle_upload(origin_file_path):
         Response:  If no suitable file is found in the request or the file
         size is too large.
     """
-    logger.info("*** 'handle_upload' was triggered ***")
-    logger.info(f"'origin_file_path': {origin_file_path}")
-    logger.info(f"'request.files': {request.files}")
+    # logger.info("*** 'handle_upload' was triggered ***")
+    # logger.info(f"'origin_file_path': {origin_file_path}")
+    # logger.info(f"'request.files': {request.files}")
 
     if "image" not in request.files and "file" not in request.files:
         logger.warning(f"'request.files': {request.files}")
         return Response("No file part", status=400)
 
     file_key = "image" if "image" in request.files else "file"
+
     try:
         uploaded_file = request.files[file_key]
         logger.info(f"'uploaded_file': {uploaded_file}")
@@ -43,9 +44,9 @@ def handle_upload(origin_file_path):
 
         try:
             if allowed_path_and_extension(origin_file_path):
-                logger.info("passed 'if allowed_path_and_extension(origin_file_path)'")
+                # logger.info("passed if 'allowed_path_and_extension(origin_file_path)'")
                 secured_path = path_secure(origin_file_path, file_key)
-                logger.info(f"'secured_path': {secured_path}")
+                # logger.info(f"'secured_path': {secured_path}")
 
                 with open(secured_path, "wb") as destination_file:
                     uploaded_file.save(destination_file)

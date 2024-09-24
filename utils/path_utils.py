@@ -1,8 +1,11 @@
 from extensions.logger import logger
-from flask import app, request, Response
+from flask import current_app, request, Response
 import os
 from werkzeug.utils import secure_filename
 from utils.file_validation import is_valid_image, is_valid_file
+
+# from app import app
+# from config import Config
 
 
 def get_file_extension(origin_file_path):
@@ -17,13 +20,13 @@ def get_file_extension(origin_file_path):
     Returns:
         bool: True if the file extension is supported, False otherwise.
     """
-    logger.info("*** 'get_file_extension' was triggered ***")
+    # logger.info("*** 'get_file_extension' was triggered ***")
     file_extension = origin_file_path.split(".")[-1]
-    logger.info(f"'file_extension': {file_extension}")
+    # logger.info(f"'file_extension': {file_extension}")
 
     if (
-        file_extension not in app.config["ALLOWED_EXTENSIONS"]["image"]
-        and file_extension not in app.config["ALLOWED_EXTENSIONS"]["document"]
+        file_extension not in current_app.config["ALLOWED_EXTENSIONS"]["image"]
+        and file_extension not in current_app.config["ALLOWED_EXTENSIONS"]["document"]
     ):
         return False
     return True
@@ -39,11 +42,11 @@ def get_request_directory(req_abs_file_path):
     Returns:
         str: The extracted directory absolute path.
     """
-    logger.info("*** 'get_request_directory' was triggered ***")
-    logger.info(f"'req_abs_file_path': {req_abs_file_path}")
+    # logger.info("*** 'get_request_directory' was triggered ***")
+    # logger.info(f"'req_abs_file_path': {req_abs_file_path}")
 
     parts = req_abs_file_path.split("/")
-    logger.info(f"directory: {'/'.join(parts[:-1])}")
+    # logger.info(f"directory: {'/'.join(parts[:-1])}")
     return "/".join(parts[:-1])
 
 
@@ -61,23 +64,23 @@ def is_valid_file_path(origin_file_path):
     Returns:
         bool: True if the file path is valid, False otherwise.
     """
-    logger.info(f"*** 'is_valid_file_path' was triggered ***")
-
-    logger.info(f"'origin_file_path': {origin_file_path}")
+    # logger.info(f"*** 'is_valid_file_path' was triggered ***")
+    #
+    # logger.info(f"'origin_file_path': {origin_file_path}")
 
     req_abs_file_path = os.path.abspath(
         os.path.normpath(
-            os.path.join(media_proxy.config["MEDIA_FILES_DEST"], origin_file_path)
+            os.path.join(current_app.config["MEDIA_FILES_DEST"], origin_file_path)
         )
     )
     logger.info(f"'req_abs_file_path': {req_abs_file_path}")
 
-    media_abs_path = os.path.abspath(media_proxy.config["MEDIA_FILES_DEST"])
+    media_abs_path = os.path.abspath(current_app.config["MEDIA_FILES_DEST"])
     logger.info(f"'media_abs_path': {media_abs_path}")
 
     allowed_dirs = [
         os.path.join(media_abs_path, directory)
-        for directory in media_proxy.config["ALLOWED_DIRECTORIES"]
+        for directory in current_app.config["ALLOWED_DIRECTORIES"]
     ]
     logger.info(f"'allowed_dirs': {allowed_dirs}")
 
@@ -124,10 +127,10 @@ def path_secure(origin_file_path, file_key):
         return Response("Directory not allowed", status=403)
 
     if is_valid_image(uploaded_file):
-        allowed_path = os.path.join(media_proxy.config["MEDIA_FILES_DEST"], "images")
+        allowed_path = os.path.join(current_app.config["MEDIA_FILES_DEST"], "images")
         logger.info(f"'allowed_path': {allowed_path}")
     elif is_valid_file(uploaded_file):
-        allowed_path = os.path.join(media_proxy.config["MEDIA_FILES_DEST"], "files")
+        allowed_path = os.path.join(current_app.config["MEDIA_FILES_DEST"], "files")
         logger.info(f"'allowed_path': {allowed_path}")
     else:
         logger.warning("Invalid file type")
