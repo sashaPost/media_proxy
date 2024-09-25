@@ -4,8 +4,6 @@ from extensions.logger import logger
 from middleware.auth import check_api_key
 from utils.upload_handler import handle_upload
 
-# from config import Config
-
 
 file_bp = Blueprint("file", __name__)
 
@@ -44,8 +42,6 @@ def handle_get_request(file_path):
         )
     except FileNotFoundError:
         return Response("File not found", status=404)
-    except Exception as e:
-        return Response("Unsupported method", status=405)
 
 
 @file_bp.route("/media/<path:origin_file_path>", methods=["POST"])

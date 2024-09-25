@@ -1,9 +1,7 @@
 from flask import current_app, request, jsonify
 from extensions.logger import logger
 from functools import wraps
-
-# from app import app
-from config import Config
+import os
 
 
 def check_api_key(func):
@@ -27,7 +25,8 @@ def check_api_key(func):
     def wrapper(*args, **kwargs):
         # logger.info(f"Request API key: {request.headers.get('Authorization')}")
         # logger.info(f"Source API key: {app.config["API_KEY"]}")
-        if request.headers.get("Authorization") != current_app.config["API_KEY"]:
+        expected_header = os.environ.get("API_KEY_HEADER", "Authorization")
+        if request.headers.get(expected_header) != os.environ.get("API_KEY"):
             return jsonify({"error": "Unauthorized"}), 401
         return func(*args, **kwargs)
 
