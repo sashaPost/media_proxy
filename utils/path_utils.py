@@ -4,9 +4,6 @@ import os
 from werkzeug.utils import secure_filename
 from utils.file_validation import is_valid_image, is_valid_file
 
-# from app import app
-# from config import Config
-
 
 def get_file_extension(origin_file_path):
     """Determines whether the file extension in the provided path is allowed.
