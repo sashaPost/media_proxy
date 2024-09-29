@@ -4,9 +4,6 @@ from extensions.logger import logger
 from routes.file_routes import file_bp
 from routes.setup_routes import setup_bp
 
-# from routes.setup_routes import directories_check
-# from flask import Blueprint
-
 
 def create_app(config_class=Config):
     app = Flask(__name__)

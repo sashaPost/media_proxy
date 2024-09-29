@@ -9,6 +9,7 @@ def app():
     app = create_app()
     app.config["TESTING"] = True
     app.config["MEDIA_FILES_DEST"] = "media"
+    # app.config["API_KEY"] = "test_api_key"
     return app
 
 

@@ -1,4 +1,10 @@
-from flask import Blueprint, current_app, Response, send_from_directory
+from flask import (
+    Blueprint,
+    current_app,
+    # Response,
+    send_from_directory,
+    jsonify,
+)
 import os
 from extensions.logger import logger
 from middleware.auth import check_api_key
@@ -41,7 +47,8 @@ def handle_get_request(file_path):
             os.path.basename(file_path),
         )
     except FileNotFoundError:
-        return Response("File not found", status=404)
+        # return Response("File not found", status=404)
+        return jsonify({"error": "File not found"}), 404
 
 
 @file_bp.route("/media/<path:origin_file_path>", methods=["POST"])
@@ -67,5 +74,7 @@ def upload_file(origin_file_path):
     # logger.info(f"'origin_file_path': {origin_file_path}")
 
     if handle_upload(origin_file_path):
-        return Response("OK", status=200)
-    return Response("Error uploading file", status=501)
+        # return Response("OK", status=200)
+        return jsonify({"message": "OK"}), 200
+    # return Response("Error uploading file", status=501)
+    return jsonify({"error": "Error uploading file"}), 501

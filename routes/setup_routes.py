@@ -1,7 +1,7 @@
-# from config import Config
 from flask import Blueprint, current_app
 from extensions.logger import logger
 import os
+
 
 setup_bp = Blueprint("setup", __name__)
 
@@ -12,7 +12,7 @@ def directories_check():
     Creates media directories on first request.
     """
     logger.info("*** 'directories_check' was triggered ***")
-    # dest_dir = None
+    dest_dir = None
     try:
         os.makedirs(current_app.config["MEDIA_FILES_DEST"], exist_ok=True)
         for directory in current_app.config["ALLOWED_DIRECTORIES"]:

@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
-from flask import Response
+from unittest.mock import patch
 from utils.upload_handler import handle_upload
 import io
 
