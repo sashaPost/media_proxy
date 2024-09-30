@@ -8,7 +8,6 @@ import docx
 import tempfile
 from PIL import Image
 import olefile
-import os
 import struct
 
 

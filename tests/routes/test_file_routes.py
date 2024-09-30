@@ -1,8 +1,4 @@
-import pytest
-from flask import Flask
-from routes.file_routes import handle_get_request, handle_upload, file_bp
-from unittest.mock import patch, MagicMock
-import os
+from unittest.mock import patch
 
 
 class TestFileRoutes:
@@ -28,9 +24,7 @@ class TestFileRoutes:
             "/media/images/test.jpg", headers={"Authorization": api_key}
         )
         assert response.status_code == 200
-        # assert response.data == b'OK'
         assert response.json == {"message": "OK"}
-        # mock_handle_upload.assert_called_once_with('images/test.jpg')
 
     @patch("routes.file_routes.handle_upload")
     def test_upload_file_failure(self, mock_handle_upload, client, api_key):
@@ -39,7 +33,6 @@ class TestFileRoutes:
             "/media/images/test.jpg", headers={"Authorization": api_key}
         )
         assert response.status_code == 501
-        # assert response.json == b'Error uploading file'
         assert response.json == {"error": "Error uploading file"}
 
     def test_upload_file_no_api_key(self, client):

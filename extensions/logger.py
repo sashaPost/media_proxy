@@ -1,10 +1,8 @@
 import logging
-from flask import current_app
 
 
 class Logger:
     def __init__(self, app=None):
-        # self.logger = None
         self.logger = logging.getLogger(__name__)
         self.app = app
         if app is not None:
@@ -37,6 +35,3 @@ class Logger:
 
 
 logger = Logger()
-
-# with app.app_context():
-#     logger.init_app(current_app)

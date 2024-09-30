@@ -1,6 +1,5 @@
 import pytest
 from middleware.auth import check_api_key
-from unittest.mock import patch
 
 
 class TestCheckApiKey:

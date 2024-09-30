@@ -1,6 +1,5 @@
 import pytest
 from app import create_app
-from flask import current_app
 import os
 
 
@@ -9,7 +8,6 @@ def app():
     app = create_app()
     app.config["TESTING"] = True
     app.config["MEDIA_FILES_DEST"] = "media"
-    # app.config["API_KEY"] = "test_api_key"
     return app
 
 
@@ -36,32 +34,3 @@ def invalid_image_data():
 @pytest.fixture(scope="function")
 def media_files_destination(app):
     return app.config["MEDIA_FILES_DEST"]
-
-
-# @pytest.fixture(scope="module")
-# def client():
-#     app = create_app()
-#     app.config["TESTING"] = True
-#     app.config["MEDIA_FILES_DEST"] = "media"
-#     with app.test_client() as client:
-#         yield client
-
-#
-# @pytest.fixture()
-# def api_key():
-#     return os.getenv("API_KEY")
-#
-#
-# @pytest.fixture()
-# def valid_image_data():
-#     return b"89 PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
-#
-#
-# @pytest.fixture()
-# def invalid_image_data():
-#     return b"This is not an image file"
-#
-#
-# @pytest.fixture()
-# def media_files_destination():
-#     return current_app.config["MEDIA_FILES_DEST"]

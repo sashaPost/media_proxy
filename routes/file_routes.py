@@ -1,7 +1,6 @@
 from flask import (
     Blueprint,
     current_app,
-    # Response,
     send_from_directory,
     jsonify,
 )
@@ -35,11 +34,7 @@ def handle_get_request(file_path):
     """
     logger.info("'GET' method detected")
 
-    # logger.info(f"'file_path': {file_path}")
-
     try:
-        # logger.info(f"'os.path.dirname': {os.path.dirname(file_path)}")
-        # logger.info(f"'os.path.basename': {os.path.basename(file_path)}")
         return send_from_directory(
             os.path.join(
                 current_app.config["MEDIA_FILES_DEST"], os.path.dirname(file_path)
@@ -47,7 +42,6 @@ def handle_get_request(file_path):
             os.path.basename(file_path),
         )
     except FileNotFoundError:
-        # return Response("File not found", status=404)
         return jsonify({"error": "File not found"}), 404
 
 
@@ -70,11 +64,6 @@ def upload_file(origin_file_path):
     """
     logger.info("'POST' method detected")
 
-    # logger.info("*** 'upload_file' was triggered ***")
-    # logger.info(f"'origin_file_path': {origin_file_path}")
-
     if handle_upload(origin_file_path):
-        # return Response("OK", status=200)
         return jsonify({"message": "OK"}), 200
-    # return Response("Error uploading file", status=501)
     return jsonify({"error": "Error uploading file"}), 501
