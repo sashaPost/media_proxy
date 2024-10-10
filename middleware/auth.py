@@ -1,30 +1,37 @@
+from collections.abc import Callable
+from typing import Optional
 from flask import request, jsonify
 from functools import wraps
-import os
+from config.app_config import AppConfig
 
 
-def check_api_key(func):
-    """
-    A Flask middleware for API key authentication.
+class AuthMiddleware:
+    def __init__(self, config: AppConfig) -> None:
+        self.config = config
 
-    This middleware intercepts requests and verifies the presence and validity
-    of an API key in the Authorization header.
+    def get_api_key(self) -> str:
+        return self.config.API_KEY
 
-    Args:
-        func (function): The decorated function to be protected.
+    def get_api_key_header(self) -> str:
+        return "Authorization"
 
-    Returns:
-        function: The wrapped function with API key authentication.
+    def check_api_key(self, func: Optional[Callable] = None) -> Callable:
+        def decorator(f: Callable) -> Callable:
+            @wraps(f)
+            def wrapper(*args, **kwargs):
+                api_key = self.get_api_key()
+                header_name = self.get_api_key_header()
 
-    Raises:
-        HTTPException (401): If the API key is missing or invalid.
-    """
+                if request.headers.get(header_name) != api_key:
+                    return jsonify({"error": "Unauthorized"}), 401
+                return f(*args, **kwargs)
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        expected_header = os.environ.get("API_KEY_HEADER", "Authorization")
-        if request.headers.get(expected_header) != os.environ.get("API_KEY"):
-            return jsonify({"error": "Unauthorized"}), 401
-        return func(*args, **kwargs)
+            return wrapper
 
-    return wrapper
+        if func:
+            return decorator(func)
+        return decorator
+
+
+def create_auth_middleware(config: AppConfig) -> AuthMiddleware:
+    return AuthMiddleware(config)

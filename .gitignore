@@ -11,9 +11,6 @@ media/
 htmlcov/
 
 .env
-.list_env_vars.py
-
-tests/routes/test_setup_routes.py   # to be fixed
 
 *.ini
 *.pyc

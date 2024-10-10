@@ -1,5 +1,5 @@
 from flask import Flask
-from config import Config
+from config.app_config import AppConfig
 from extensions.logger import logger
 from routes.file_routes import file_bp
 from routes.health_check import health_bp
@@ -7,7 +7,7 @@ from routes.setup_routes import setup_bp
 import os
 
 
-def create_app(config_class=Config):
+def create_app(config_class=AppConfig):
     app = Flask(__name__)
     app.config.from_object(config_class)
 

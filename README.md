@@ -33,7 +33,7 @@ Set the following environment variables:
 
 You can also set all necessary environment variables at once using the provided `set_env.sh` script:<br>
 `chmod +x set_env.sh`<br>
-`source set_env.sh`
+`source ./set_env.sh`
 
 ## Running the Application
 * Using Virtual Environment: `flask run`
