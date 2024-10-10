@@ -16,3 +16,5 @@ htmlcov/
 *.pyc
 *.sock
 *.old
+
+old_requirements.txt

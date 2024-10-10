@@ -1,36 +1,19 @@
-from collections.abc import Callable
-from typing import Optional
-from flask import request, jsonify
-from functools import wraps
+from fastapi import HTTPException, Depends, Header
+from fastapi.security import APIKeyHeader
 from config.app_config import AppConfig
 
 
 class AuthMiddleware:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
+        self.api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
-    def get_api_key(self) -> str:
-        return self.config.API_KEY
-
-    def get_api_key_header(self) -> str:
-        return "Authorization"
-
-    def check_api_key(self, func: Optional[Callable] = None) -> Callable:
-        def decorator(f: Callable) -> Callable:
-            @wraps(f)
-            def wrapper(*args, **kwargs):
-                api_key = self.get_api_key()
-                header_name = self.get_api_key_header()
-
-                if request.headers.get(header_name) != api_key:
-                    return jsonify({"error": "Unauthorized"}), 401
-                return f(*args, **kwargs)
-
-            return wrapper
-
-        if func:
-            return decorator(func)
-        return decorator
+    async def verify_api_key(
+        self, api_key: str = Depends(APIKeyHeader(name="Authorization"))
+    ):
+        if api_key != self.config.API_KEY:
+            raise HTTPException(status_code=401, detail="Invalid API Key")
+        return True
 
 
 def create_auth_middleware(config: AppConfig) -> AuthMiddleware:

@@ -1,15 +1,15 @@
-from dotenv import load_dotenv
-import os
-import secrets
+from pydantic import Field
+from pydantic_settings import BaseSettings
+from typing import List
 
 
-load_dotenv()
+class AppConfig(BaseSettings):
+    API_KEY: str = Field(..., env="API_KEY")
+    ALLOWED_DIRECTORIES: List[str] = ["images", "files"]
+    MEDIA_FILES_DEST: str = "media"
+    # DEBUG: bool = False
+    DEBUG: bool = True
 
-
-class AppConfig:
-    SECRET_KEY = str(secrets.SystemRandom().getrandbits(128))
-    API_KEY = os.getenv("API_KEY")
-    ALLOWED_DIRECTORIES = ["images", "files"]
-    MEDIA_FILES_DEST = "media"
-    ENV = os.environ.get("ENV", "development") == "production"
-    DEBUG = os.environ.get("FLASK_DEBUG", "0") == "1"
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"

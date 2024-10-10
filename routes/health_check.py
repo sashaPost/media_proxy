@@ -1,9 +1,14 @@
-from flask import Blueprint, jsonify
+from fastapi import APIRouter
+from pydantic import BaseModel
 
 
-health_bp = Blueprint("health", __name__)
+health_router = APIRouter()
 
 
-@health_bp.route("/health")
-def health_check():
-    return jsonify({"status": "healthy"}), 200
+class HealthResponse(BaseModel):
+    status: str
+
+
+@health_router.get("/health", response_model=HealthResponse)
+async def health_check():
+    return HealthResponse(status="healthy")
