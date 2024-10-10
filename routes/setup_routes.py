@@ -1,22 +1,31 @@
-from flask import Blueprint, current_app
 from extensions.logger import logger
 import os
+from config.app_config import AppConfig
 
 
-setup_bp = Blueprint("setup", __name__)
-
-
-@setup_bp.before_app_request
-def directories_check():
+def initialize_directories(app):
     """
-    Creates media directories on first request.
+    Creates media directories if they don't exist.
+    This function should be called once during app initialization.
     """
-    logger.info("*** 'directories_check' was triggered ***")
-    dest_dir = None
+    config = AppConfig()
+    logger.info("Checking and creating media directories if necessary")
     try:
-        os.makedirs(current_app.config["MEDIA_FILES_DEST"], exist_ok=True)
-        for directory in current_app.config["ALLOWED_DIRECTORIES"]:
-            dest_dir = os.path.join(current_app.config["MEDIA_FILES_DEST"], directory)
+        if not os.path.exists(config.MEDIA_FILES_DEST):
+            os.makedirs(config.MEDIA_FILES_DEST, exist_ok=True)
+            logger.info(f"Created main media directory: {config.MEDIA_FILES_DEST}")
+
+        for directory in config.ALLOWED_DIRECTORIES:
+            dest_dir = os.path.join(config.MEDIA_FILES_DEST, directory)
             os.makedirs(dest_dir, exist_ok=True)
+            logger.info(f"Created subdirectory: {dest_dir}")
     except OSError as e:
-        logger.error(f"Failed to create directory {dest_dir}: {e}")
+        logger.error(f"Failed to create directory: {e}")
+
+
+def setup_app(app):
+    """
+    Performs necessary setup steps for the application.
+    This function should be called once during app initialization.
+    """
+    initialize_directories(app)
